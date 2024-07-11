@@ -1,0 +1,102 @@
+import java.net.*;
+import java.io.*;
+
+int interval = 10;  // próbkowanie w ms 
+int lastFetchTime = 0;
+float[] angles = {0, 0, 0};  // Aktualne kąty obrotu członów w stopniach
+float base_angle = 0;  // Początkowy kąt obrotu podstawy, skierowany pionowo w górę
+int[] link_lengths = {200, 200, 200};  // Długości członów manipulatora
+
+void setup() 
+{
+  size(1920, 1080);
+  base_angle = -90;  // Ustawienie początkowego kąta obrotu podstawy w funkcji setup
+}
+
+void draw() 
+{
+  background(255);  // Białe tło
+
+  // Sprawdź, czy upłynął czas do pobrania nowych danych
+  if (millis() - lastFetchTime >= interval) 
+  {
+    getData();
+    lastFetchTime = millis();
+  }
+
+  // Rysowanie podstawy manipulatora (czerwony)
+  pushMatrix();  // Zapisz macierz transformacji
+  translate(width / 2, height / 1.4);  // Przesunięcie początku układu współrzędnych
+  stroke(255, 0, 0);  // Czerwony kolor linii
+  strokeWeight(20);
+
+  rotate(radians(base_angle));  // Obrót podstawy względem odczytanego kąta
+  line(0, 0, 100, 0);  // Rysowanie członu podstawy
+  popMatrix();  // Przywróć macierz transformacji
+
+  // Rysowanie manipulatora (niebieski)
+  pushMatrix();  // Zapisz macierz transformacji
+  translate(width / 2, height / 1.4);  // Przesunięcie początku układu współrzędnych
+  stroke(0, 0, 255);  // Niebieski kolor linii
+  strokeWeight(20);
+
+  float x = 0;
+  float y = 0;
+  float total_angle = -90;  // Ustawienie początkowego kąta na 90 stopni (pionowo)
+
+  for (int i = 0; i < 3; i++) {
+    if (i == 0 || i == 2) {
+      total_angle -= angles[i];  // Odwrócenie kierunku obrotu dla pierwszego i trzeciego członu
+    } else {
+      total_angle += angles[i];  // Dla drugiego członu obrót w normalnym kierunku
+    }
+    float angle_rad = radians(total_angle);
+    float new_x = x + link_lengths[i] * cos(angle_rad);
+    float new_y = y + link_lengths[i] * sin(angle_rad);
+    line(x, y, new_x, new_y);
+    x = new_x;
+    y = new_y;
+  }
+
+  popMatrix();  // Przywróć macierz transformacji
+}
+
+void getData() 
+{
+  Thread thread = new Thread(new Runnable() {
+    public void run() {
+      String url = "http://MuodyGri.pythonanywhere.com/get_last_point";
+      try {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Accept", "application/json");
+
+        if (conn.getResponseCode() == 200) {
+          BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+          String inputLine;
+          StringBuffer content = new StringBuffer();
+          while ((inputLine = in.readLine()) != null) {
+            content.append(inputLine);
+          }
+          in.close();
+          conn.disconnect();
+
+          String responseText = content.toString();
+          JSONObject json = parseJSONObject(responseText);
+          if (json != null) {
+            // Aktualizacja kątów z odpowiedzi
+            angles[0] = json.getFloat("a2");
+            angles[1] = -json.getFloat("a3");
+            angles[2] = json.getFloat("a4");
+            base_angle = -90 + json.getFloat("a1");
+          }
+        } else {
+          println("Błąd podczas pobierania danych: " + conn.getResponseCode());
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }
+  });
+  thread.start();
+}

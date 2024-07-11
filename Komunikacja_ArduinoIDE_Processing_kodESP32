@@ -1,0 +1,52 @@
+#include <Wire.h>
+
+#define PCA9548A_ADDR 0x70 // Adres I2C multipleksera PCA9548A
+#define AS5600_ADDR 0x36 // Adres I2C enkodera AS5600
+
+void selectMultiplexerChannel(uint8_t channel) {
+  if (channel > 7) return;
+  Wire.beginTransmission(PCA9548A_ADDR);
+  Wire.write(1 << channel);
+  Wire.endTransmission();
+}
+
+void setup() {
+  Serial.begin(115200); // Uruchomienie komunikacji szeregowej z prędkością 115200 baudów
+  Wire.begin(); // Uruchomienie komunikacji I2C
+}
+
+void loop() {
+  float angle0 = readAngleFromChannel(0);
+  float angle1 = readAngleFromChannel(1);
+  float angle2 = readAngleFromChannel(2);
+  float baseAngle = readAngleFromChannel(3); // Odczyt czwartego enkodera
+
+  Serial.print(angle0);
+  Serial.print(",");
+  Serial.print(angle1);
+  Serial.print(",");
+  Serial.print(angle2);
+  Serial.print(",");
+  Serial.println(baseAngle);
+
+  delay(5); // Opóźnienie 5 ms między kolejnymi odczytami
+}
+
+float readAngleFromChannel(uint8_t channel) {
+  selectMultiplexerChannel(channel);
+  
+  Wire.beginTransmission(AS5600_ADDR);
+  Wire.write(0x0C); // Rejestr MSB kąta (RAW ANGLE)
+  Wire.endTransmission();
+
+  Wire.requestFrom(AS5600_ADDR, 2);
+  uint16_t rawAngle = 0;
+  if (Wire.available() >= 2) {
+    rawAngle = Wire.read() << 8; // MSB
+    rawAngle |= Wire.read(); // LSB
+  }
+
+  // Przeliczenie na kąt w stopniach (4096 jednostek na pełny obrót)
+  float angle_degrees = rawAngle * 360.0 / 4096.0;
+  return angle_degrees;
+}
